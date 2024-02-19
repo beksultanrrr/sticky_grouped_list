@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:meta/meta.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
-
+import 'package:flutter/material.dart';
 import 'sticky_grouped_list_order.dart';
 
 /// A groupable list of widgets similar to [ScrollablePositionedList], execpt
@@ -11,6 +11,8 @@ import 'sticky_grouped_list_order.dart';
 ///
 /// See [ScrollablePositionedList]
 class StickyGroupedListView<T, E> extends StatefulWidget {
+  final Widget Function(E value)? buildCalendar;
+
   /// Items of which [itemBuilder] or [indexedItemBuilder] produce the list.
   final List<T> elements;
 
@@ -42,8 +44,7 @@ class StickyGroupedListView<T, E> extends StatefulWidget {
 
   /// Called to build children for the list with
   /// 0 <= element, index < elements.length
-  final Widget Function(BuildContext context, T element, int index)?
-      indexedItemBuilder;
+  final Widget Function(BuildContext context, T element, int index)? indexedItemBuilder;
 
   /// Used to clearly indentify an element. The returned value can be of any
   /// type but must be unique for each element.
@@ -65,7 +66,9 @@ class StickyGroupedListView<T, E> extends StatefulWidget {
 
   /// Background color of the sticky header.
   /// Only used if [floatingHeader] is false.
-  final Color stickyHeaderBackgroundColor;
+  final Color? stickyHeaderBackgroundColor;
+
+  final double? headerPadingTop;
 
   /// Controller for jumping or scrolling to an item.
   final GroupedItemScrollController? itemScrollController;
@@ -143,6 +146,7 @@ class StickyGroupedListView<T, E> extends StatefulWidget {
     required this.elements,
     required this.groupBy,
     required this.groupSeparatorBuilder,
+    this.buildCalendar,
     this.groupComparator,
     this.itemBuilder,
     this.indexedItemBuilder,
@@ -151,7 +155,8 @@ class StickyGroupedListView<T, E> extends StatefulWidget {
     this.order = StickyGroupedListOrder.ASC,
     this.separator = const SizedBox.shrink(),
     this.floatingHeader = false,
-    this.stickyHeaderBackgroundColor = const Color(0xffF7F7F7),
+    this.stickyHeaderBackgroundColor,
+    this.headerPadingTop,
     this.scrollDirection = Axis.vertical,
     this.itemScrollController,
     this.itemPositionsListener,
@@ -173,8 +178,9 @@ class StickyGroupedListView<T, E> extends StatefulWidget {
 }
 
 @internal
-class StickyGroupedListViewState<T, E>
-    extends State<StickyGroupedListView<T, E>> {
+class StickyGroupedListViewState<T, E> extends State<StickyGroupedListView<T, E>> {
+  bool _scrollControllerStarted = false;
+
   /// Used within [GroupedItemScrollController].
   @protected
   List<T> sortedElements = [];
@@ -233,70 +239,70 @@ class StickyGroupedListViewState<T, E>
     var hiddenIndex = widget.reverse ? sortedElements.length * 2 - 1 : 0;
     _isSeparator = widget.reverse ? (int i) => i.isOdd : (int i) => i.isEven;
 
-    return Stack(
-      key: _key,
-      alignment: Alignment.topCenter,
-      children: <Widget>[
-        ScrollablePositionedList.builder(
-          key: widget.key,
-          scrollDirection: widget.scrollDirection,
-          itemScrollController: _controller,
-          physics: widget.physics,
-          itemPositionsListener: _listener,
-          initialAlignment: widget.initialAlignment,
-          initialScrollIndex: widget.initialScrollIndex * 2,
-          minCacheExtent: widget.minCacheExtent,
-          semanticChildCount: widget.semanticChildCount,
-          padding: widget.padding,
-          reverse: widget.reverse,
-          itemCount: sortedElements.length * 2,
-          addAutomaticKeepAlives: widget.addAutomaticKeepAlives,
-          addRepaintBoundaries: widget.addRepaintBoundaries,
-          addSemanticIndexes: widget.addSemanticIndexes,
-          shrinkWrap: widget.shrinkWrap,
-          itemBuilder: (context, index) {
-            int actualIndex = index ~/ 2;
+    return Column(
+      children: [
+        _buildCalendarWidget(sortedElements[_topElementIndex]),
+        Expanded(
+          child: Stack(
+            key: _key,
+            alignment: Alignment.topCenter,
+            children: <Widget>[
+              ScrollablePositionedList.builder(
+                key: widget.key,
+                scrollDirection: widget.scrollDirection,
+                itemScrollController: _controller,
+                physics: widget.physics,
+                itemPositionsListener: _listener,
+                initialAlignment: widget.initialAlignment,
+                initialScrollIndex: widget.initialScrollIndex * 2,
+                minCacheExtent: widget.minCacheExtent,
+                semanticChildCount: widget.semanticChildCount,
+                padding: widget.padding,
+                reverse: widget.reverse,
+                itemCount: sortedElements.length * 2,
+                addAutomaticKeepAlives: widget.addAutomaticKeepAlives,
+                addRepaintBoundaries: widget.addRepaintBoundaries,
+                addSemanticIndexes: widget.addSemanticIndexes,
+                shrinkWrap: widget.shrinkWrap,
+                itemBuilder: (context, index) {
+                  int actualIndex = index ~/ 2;
 
-            if (index == hiddenIndex) {
-              return Opacity(
-                opacity: 0,
-                child:
-                    widget.groupSeparatorBuilder(sortedElements[actualIndex]),
-              );
-            }
+                  if (index == hiddenIndex) {
+                    return Opacity(
+                      opacity: 0,
+                      child: widget.groupSeparatorBuilder(sortedElements[actualIndex]),
+                    );
+                  }
 
-            if (_isSeparator!(index)) {
-              E curr = widget.groupBy(sortedElements[actualIndex]);
-              E prev = widget.groupBy(
-                  sortedElements[actualIndex + (widget.reverse ? 1 : -1)]);
-              if (prev != curr) {
-                return widget
-                    .groupSeparatorBuilder(sortedElements[actualIndex]);
-              }
-              return widget.separator;
-            }
-            return _buildItem(context, actualIndex);
-          },
+                  if (_isSeparator!(index)) {
+                    E curr = widget.groupBy(sortedElements[actualIndex]);
+                    E prev = widget.groupBy(sortedElements[actualIndex + (widget.reverse ? 1 : -1)]);
+                    if (prev != curr) {
+                      return widget.groupSeparatorBuilder(sortedElements[actualIndex]);
+                    }
+                    return widget.separator;
+                  }
+                  return _buildItem(context, actualIndex);
+                },
+              ),
+              StreamBuilder<int>(
+                stream: _streamController.stream,
+                initialData: _topElementIndex,
+                builder: (_, snapshot) => _showFixedGroupHeader(snapshot.data!),
+              )
+            ],
+          ),
         ),
-        StreamBuilder<int>(
-          stream: _streamController.stream,
-          initialData: _topElementIndex,
-          builder: (_, snapshot) => _showFixedGroupHeader(snapshot.data!),
-        )
       ],
     );
   }
 
   Widget _buildItem(context, int actualIndex) {
-    return widget.indexedItemBuilder == null
-        ? widget.itemBuilder!(context, sortedElements[actualIndex])
-        : widget.indexedItemBuilder!(
-            context, sortedElements[actualIndex], actualIndex);
+    return widget.indexedItemBuilder == null ? widget.itemBuilder!(context, sortedElements[actualIndex]) : widget.indexedItemBuilder!(context, sortedElements[actualIndex], actualIndex);
   }
 
   _positionListener() {
-    _headerBox ??=
-        _groupHeaderKey?.currentContext?.findRenderObject() as RenderBox?;
+    _headerBox ??= _groupHeaderKey?.currentContext?.findRenderObject() as RenderBox?;
     double headerHeight = _headerBox?.size.height ?? 0;
     _listBox ??= _key.currentContext?.findRenderObject() as RenderBox?;
     double height = _listBox?.size.height ?? 0;
@@ -309,11 +315,7 @@ class StickyGroupedListViewState<T, E>
       return current.itemTrailingEdge < pos.itemTrailingEdge ? current : pos;
     }
 
-    ItemPosition currentItem = _listener.itemPositions.value
-        .where((ItemPosition position) =>
-            !_isSeparator!(position.index) &&
-            position.itemTrailingEdge > headerDimension!)
-        .reduce(reducePositions);
+    ItemPosition currentItem = _listener.itemPositions.value.where((ItemPosition position) => !_isSeparator!(position.index) && position.itemTrailingEdge > headerDimension!).reduce(reducePositions);
 
     int index = currentItem.index ~/ 2;
     if (_topElementIndex != index) {
@@ -321,7 +323,10 @@ class StickyGroupedListViewState<T, E>
         E curr = widget.groupBy(sortedElements[index]);
         E prev = widget.groupBy(sortedElements[_topElementIndex]);
         if (prev != curr) {
-          _topElementIndex = index;
+          setState(() {
+            _topElementIndex = index;
+          });
+
           _streamController.add(_topElementIndex);
         }
       } else {
@@ -338,11 +343,9 @@ class StickyGroupedListViewState<T, E>
         int? compareResult;
         // compare groups
         if (widget.groupComparator != null) {
-          compareResult =
-              widget.groupComparator!(widget.groupBy(e1), widget.groupBy(e2));
+          compareResult = widget.groupComparator!(widget.groupBy(e1), widget.groupBy(e2));
         } else if (widget.groupBy(e1) is Comparable) {
-          compareResult = (widget.groupBy(e1) as Comparable)
-              .compareTo(widget.groupBy(e2) as Comparable);
+          compareResult = (widget.groupBy(e1) as Comparable).compareTo(widget.groupBy(e2) as Comparable);
         }
         // compare elements inside group
         if (compareResult == null || compareResult == 0) {
@@ -366,13 +369,16 @@ class StickyGroupedListViewState<T, E>
       _groupHeaderKey = GlobalKey();
       return Container(
         key: _groupHeaderKey,
-        color:
-            widget.floatingHeader ? null : widget.stickyHeaderBackgroundColor,
+        color: widget.stickyHeaderBackgroundColor ?? Color(0xffF7F7F7),
         width: widget.floatingHeader ? null : MediaQuery.of(context).size.width,
         child: widget.groupSeparatorBuilder(sortedElements[index]),
       );
     }
     return Container();
+  }
+
+  Widget _buildCalendarWidget(T element) {
+    return widget.buildCalendar!(widget.groupBy(element));
   }
 
   /// The purpose of this method is to wrap [widget.elementIdentifier] and
