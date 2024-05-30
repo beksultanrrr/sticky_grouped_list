@@ -239,56 +239,54 @@ class StickyGroupedListViewState<T, E> extends State<StickyGroupedListView<T, E>
     var hiddenIndex = widget.reverse ? sortedElements.length * 2 - 1 : 0;
     _isSeparator = widget.reverse ? (int i) => i.isOdd : (int i) => i.isEven;
 
-    return Expanded(
-      child: Stack(
-        key: _key,
-        alignment: Alignment.topCenter,
-        children: <Widget>[
-          ScrollablePositionedList.builder(
-            key: widget.key,
-            scrollDirection: widget.scrollDirection,
-            itemScrollController: _controller,
-            physics: widget.physics,
-            itemPositionsListener: _listener,
-            initialAlignment: widget.initialAlignment,
-            initialScrollIndex: widget.initialScrollIndex * 2,
-            minCacheExtent: widget.minCacheExtent,
-            semanticChildCount: widget.semanticChildCount,
-            padding: widget.padding,
-            reverse: widget.reverse,
-            itemCount: sortedElements.length * 2,
-            addAutomaticKeepAlives: widget.addAutomaticKeepAlives,
-            addRepaintBoundaries: widget.addRepaintBoundaries,
-            addSemanticIndexes: widget.addSemanticIndexes,
-            shrinkWrap: widget.shrinkWrap,
-            itemBuilder: (context, index) {
-              int actualIndex = index ~/ 2;
+    return Stack(
+      key: _key,
+      alignment: Alignment.topCenter,
+      children: <Widget>[
+        ScrollablePositionedList.builder(
+          key: widget.key,
+          scrollDirection: widget.scrollDirection,
+          itemScrollController: _controller,
+          physics: widget.physics,
+          itemPositionsListener: _listener,
+          initialAlignment: widget.initialAlignment,
+          initialScrollIndex: widget.initialScrollIndex * 2,
+          minCacheExtent: widget.minCacheExtent,
+          semanticChildCount: widget.semanticChildCount,
+          padding: widget.padding,
+          reverse: widget.reverse,
+          itemCount: sortedElements.length * 2,
+          addAutomaticKeepAlives: widget.addAutomaticKeepAlives,
+          addRepaintBoundaries: widget.addRepaintBoundaries,
+          addSemanticIndexes: widget.addSemanticIndexes,
+          shrinkWrap: widget.shrinkWrap,
+          itemBuilder: (context, index) {
+            int actualIndex = index ~/ 2;
 
-              if (index == hiddenIndex) {
-                return Opacity(
-                  opacity: 0,
-                  child: widget.groupSeparatorBuilder(sortedElements[actualIndex]),
-                );
-              }
+            if (index == hiddenIndex) {
+              return Opacity(
+                opacity: 0,
+                child: widget.groupSeparatorBuilder(sortedElements[actualIndex]),
+              );
+            }
 
-              if (_isSeparator!(index)) {
-                E curr = widget.groupBy(sortedElements[actualIndex]);
-                E prev = widget.groupBy(sortedElements[actualIndex + (widget.reverse ? 1 : -1)]);
-                if (prev != curr) {
-                  return widget.groupSeparatorBuilder(sortedElements[actualIndex]);
-                }
-                return widget.separator;
+            if (_isSeparator!(index)) {
+              E curr = widget.groupBy(sortedElements[actualIndex]);
+              E prev = widget.groupBy(sortedElements[actualIndex + (widget.reverse ? 1 : -1)]);
+              if (prev != curr) {
+                return widget.groupSeparatorBuilder(sortedElements[actualIndex]);
               }
-              return _buildItem(context, actualIndex);
-            },
-          ),
-          StreamBuilder<int>(
-            stream: _streamController.stream,
-            initialData: _topElementIndex,
-            builder: (_, snapshot) => _showFixedGroupHeader(snapshot.data!),
-          )
-        ],
-      ),
+              return widget.separator;
+            }
+            return _buildItem(context, actualIndex);
+          },
+        ),
+        StreamBuilder<int>(
+          stream: _streamController.stream,
+          initialData: _topElementIndex,
+          builder: (_, snapshot) => _showFixedGroupHeader(snapshot.data!),
+        )
+      ],
     );
   }
 
